@@ -122,16 +122,6 @@ export default function Navbar({ activeTab, setActiveTab, onOpenSupabaseModal, t
           </div>
 
           <button
-            onClick={onOpenSupabaseModal}
-            className="btn btn-sm btn-secondary"
-            title="Status do Banco de Dados"
-            style={{ fontSize: '0.75rem' }}
-          >
-            <Database size={14} color={isConnected ? '#10b981' : '#f59e0b'} />
-            <span>{isConnected ? 'Supabase' : 'Local'}</span>
-          </button>
-
-          <button
             onClick={toggleTheme}
             className="btn btn-sm btn-secondary"
             style={{ padding: '0.35rem 0.55rem' }}
