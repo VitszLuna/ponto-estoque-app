@@ -1,11 +1,3 @@
--- =============================================================================
--- ESQUEMA COMPLETO DE BANCO DE DADOS SUPABASE / POSTGRESQL - PONTO & ESTOQUE
--- =============================================================================
--- Execute este script completo no SQL Editor do seu projeto Supabase (https://app.supabase.com)
--- para criar todas as tabelas, índices, políticas de segurança e dados iniciais.
--- =============================================================================
-
--- 1. TABELA DE FUNCIONÁRIOS (employees)
 CREATE TABLE IF NOT EXISTS public.employees (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
