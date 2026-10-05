@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, UserCheck, UserX, UserPlus, Search, Edit3, FileText, RotateCcw } from 'lucide-react';
+import { Users, UserCheck, UserX, UserPlus, Search, Edit3, FileText, RotateCcw, IdCard } from 'lucide-react';
 
 export default function EmployeeManagement({
   employees,
@@ -14,7 +14,7 @@ export default function EmployeeManagement({
 
   const [formData, setFormData] = useState({
     name: '',
-    cpf: '',
+    matricula: '',
     role: '',
     department: '',
     standard_daily_hours: 8.8,
@@ -25,6 +25,7 @@ export default function EmployeeManagement({
   const filteredEmployees = employees.filter(emp => {
     const matchStatus = emp.status === activeTab;
     const matchSearch = emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (emp.matricula && emp.matricula.toLowerCase().includes(searchQuery.toLowerCase())) ||
                         (emp.department && emp.department.toLowerCase().includes(searchQuery.toLowerCase())) ||
                         (emp.role && emp.role.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchStatus && matchSearch;
@@ -34,7 +35,7 @@ export default function EmployeeManagement({
     setEditingEmployee(null);
     setFormData({
       name: '',
-      cpf: '',
+      matricula: '',
       role: 'Operador',
       department: 'Geral',
       standard_daily_hours: 8.8,
@@ -48,11 +49,11 @@ export default function EmployeeManagement({
     setEditingEmployee(emp);
     setFormData({
       name: emp.name,
-      cpf: emp.cpf || '',
+      matricula: emp.matricula || emp.cpf || '',
       role: emp.role || '',
       department: emp.department || '',
-      standard_daily_hours: emp.standard_daily_hours || 8.8,
-      work_saturdays: emp.work_saturdays || false,
+      standard_daily_hours: 8.8,
+      work_saturdays: false,
       admission_date: emp.admission_date || new Date().toISOString().split('T')[0]
     });
     setIsModalOpen(true);
@@ -62,7 +63,9 @@ export default function EmployeeManagement({
     e.preventDefault();
     onSaveEmployee({
       ...(editingEmployee ? { id: editingEmployee.id } : {}),
-      ...formData
+      ...formData,
+      standard_daily_hours: 8.8,
+      work_saturdays: false
     });
     setIsModalOpen(false);
   };
@@ -96,7 +99,7 @@ export default function EmployeeManagement({
             Gestão de Funcionários
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            Cadastro da equipe, carga horária contratual e histórico de ex-colaboradores desligados.
+            Cadastro da equipe • Jornada fixa CLT de <strong>8h 48min (Segunda a Sexta)</strong>.
           </p>
         </div>
 
@@ -144,7 +147,7 @@ export default function EmployeeManagement({
           <input
             type="text"
             className="form-input"
-            placeholder="Buscar por nome, cargo ou setor..."
+            placeholder="Buscar por nome, matrícula, cargo..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             style={{ paddingLeft: '2.2rem' }}
@@ -158,11 +161,11 @@ export default function EmployeeManagement({
           <table className="custom-table">
             <thead>
               <tr>
-                <th>Nome / CPF</th>
+                <th>Nome / Nº Matrícula</th>
                 <th>Cargo</th>
                 <th>Setor</th>
                 <th>Jornada Diária</th>
-                <th>Sábados</th>
+                <th>Sábados / Domingos</th>
                 <th>Admissão</th>
                 {activeTab === 'inactive' && <th>Desligamento</th>}
                 <th style={{ textAlign: 'right' }}>Ações</th>
@@ -182,8 +185,8 @@ export default function EmployeeManagement({
                   <tr key={emp.id}>
                     <td style={{ fontWeight: 700 }}>
                       <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{emp.name}</div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                        {emp.cpf || 'Sem CPF'}
+                      <span style={{ fontSize: '0.75rem', color: 'var(--accent-blue)', fontFamily: 'monospace', fontWeight: 600 }}>
+                        Matrícula: {emp.matricula || emp.cpf || 'Sem Nº'}
                       </span>
                     </td>
                     <td>{emp.role}</td>
@@ -193,14 +196,12 @@ export default function EmployeeManagement({
                       </span>
                     </td>
                     <td style={{ fontWeight: 700, color: 'var(--accent-blue)' }}>
-                      {(emp.standard_daily_hours || 8.8) === 8.8 ? '8h 48min / dia' : `${emp.standard_daily_hours}h / dia`}
+                      8h 48min (Seg a Sex)
                     </td>
                     <td>
-                      {emp.work_saturdays ? (
-                        <span className="badge badge-overtime">Sim</span>
-                      ) : (
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Não</span>
-                      )}
+                      <span className="badge badge-overtime" title="Qualquer trabalho no final de semana é 100% hora extra">
+                        100% Extra
+                      </span>
                     </td>
                     <td style={{ fontSize: '0.85rem' }}>
                       {emp.admission_date ? new Date(`${emp.admission_date}T12:00:00`).toLocaleDateString('pt-BR') : '--'}
@@ -272,7 +273,7 @@ export default function EmployeeManagement({
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Ex: Carlos Silva"
+                  placeholder="Ex: Leandro Silva"
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   required
@@ -281,13 +282,14 @@ export default function EmployeeManagement({
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
                 <div className="form-group">
-                  <label className="form-label">CPF</label>
+                  <label className="form-label">Nº de Matrícula</label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="000.000.000-00"
-                    value={formData.cpf}
-                    onChange={e => setFormData({ ...formData, cpf: e.target.value })}
+                    placeholder="Ex: MAT-00123"
+                    value={formData.matricula}
+                    onChange={e => setFormData({ ...formData, matricula: e.target.value })}
+                    required
                   />
                 </div>
 
@@ -308,7 +310,7 @@ export default function EmployeeManagement({
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Ex: Operador"
+                    placeholder="Ex: Encarregado"
                     value={formData.role}
                     onChange={e => setFormData({ ...formData, role: e.target.value })}
                     required
@@ -320,7 +322,7 @@ export default function EmployeeManagement({
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Ex: Produção"
+                    placeholder="Ex: Manutenção / Limpeza"
                     value={formData.department}
                     onChange={e => setFormData({ ...formData, department: e.target.value })}
                     required
@@ -328,36 +330,16 @@ export default function EmployeeManagement({
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
-                <div className="form-group">
-                  <label className="form-label">Carga Diária (Horas)</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="1"
-                    max="12"
-                    className="form-input"
-                    value={formData.standard_daily_hours}
-                    onChange={e => setFormData({ ...formData, standard_daily_hours: parseFloat(e.target.value) || 8.0 })}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Trabalha Sábados?</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem' }}>
-                    <input
-                      type="checkbox"
-                      id="work_saturdays"
-                      style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                      checked={formData.work_saturdays}
-                      onChange={e => setFormData({ ...formData, work_saturdays: e.target.checked })}
-                    />
-                    <label htmlFor="work_saturdays" style={{ fontSize: '0.85rem', cursor: 'pointer' }}>
-                      Sábado é dia normal
-                    </label>
-                  </div>
-                </div>
+              <div style={{
+                background: 'var(--accent-blue-subtle)',
+                padding: '0.75rem 1rem',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.825rem',
+                color: 'var(--accent-blue)',
+                fontWeight: 600,
+                marginTop: '0.5rem'
+              }}>
+                ℹ️ Jornada Padrão da Empresa: <strong>8h 48min por dia (Segunda a Sexta)</strong> com 1h de almoço. Sábados e Domingos são 100% Horas Extras.
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>

@@ -13,7 +13,9 @@ import {
   FileText,
   AlertTriangle,
   Boxes,
-  RefreshCw
+  RefreshCw,
+  Sparkles,
+  Wrench
 } from 'lucide-react';
 
 export default function StockManagement({
@@ -26,14 +28,18 @@ export default function StockManagement({
 }) {
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Sub-aba ativa: 'products' | 'movements' | 'reports'
+  // Sub-aba ativa: 'movements' | 'products' | 'reports'
   const [subTab, setSubTab] = useState('movements');
+
+  // Filtro de Categoria de Estoque: 'all' | 'limpeza' | 'manutencao'
+  const [categoryFilter, setCategoryFilter] = useState('all');
 
   // ---------- ESTADOS DE CADASTRO DE PRODUTO ----------
   const [editingProductId, setEditingProductId] = useState(null);
   const [productForm, setProductForm] = useState({
     code: '',
     name: '',
+    category: 'limpeza', // 'limpeza' ou 'manutencao'
     unit: 'UN',
     description: ''
   });
@@ -64,15 +70,13 @@ export default function StockManagement({
     { value: 'PAR', label: 'PAR - Par' },
     { value: 'PCT', label: 'PCT - Pacote' },
     { value: 'ROLO', label: 'ROLO - Rolo' },
+    { value: 'GALÃO', label: 'GALÃO - Galão' },
     { value: 'OUTRO', label: 'Outro' }
   ];
 
-  // =========================================================================
   // CÁLCULOS DE ESTOQUE ATUAL POR PRODUTO
-  // =========================================================================
   const stockLevels = useMemo(() => {
     const map = {};
-    // Inicializar produtos com estoque 0
     products.forEach(p => {
       const codeUpper = (p.code || '').trim().toUpperCase();
       map[codeUpper] = {
@@ -83,13 +87,11 @@ export default function StockManagement({
       };
     });
 
-    // Somar movimentações
     stockMovements.forEach(m => {
       const codeUpper = (m.product_code || '').trim().toUpperCase();
       if (!map[codeUpper]) {
-        // Caso exista movimentação sem produto cadastrado
         map[codeUpper] = {
-          product: { id: m.product_id, code: codeUpper, name: 'Produto Desconhecido', unit: 'UN' },
+          product: { id: m.product_id, code: codeUpper, name: 'Produto Desconhecido', unit: 'UN', category: 'outros' },
           totalEntries: 0,
           totalExits: 0,
           currentStock: 0
@@ -107,12 +109,10 @@ export default function StockManagement({
     return map;
   }, [products, stockMovements]);
 
-  // Busca do produto digitado na tela de movimentação (automático ao digitar o código)
+  // Busca do produto digitado na tela de movimentação
   const activeMovementProduct = useMemo(() => {
     const codeTyped = (movementForm.product_code || '').trim().toUpperCase();
     if (!codeTyped) return null;
-    
-    // Tentar encontrar produto por código
     const foundProduct = products.find(p => (p.code || '').trim().toUpperCase() === codeTyped);
     const stockInfo = stockLevels[codeTyped] || { currentStock: 0 };
 
@@ -122,38 +122,39 @@ export default function StockManagement({
         currentStock: stockInfo.currentStock
       };
     }
-
     return null;
   }, [movementForm.product_code, products, stockLevels]);
 
-  // ---------- PRODUTOS FILTRADOS ----------
+  // PRODUTOS FILTRADOS POR CATEGORIA E BUSCA
   const filteredProducts = useMemo(() => {
-    if (!productSearch) return products;
-    const term = productSearch.toLowerCase();
-    return products.filter(
-      p => (p.code || '').toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term)
-    );
-  }, [products, productSearch]);
+    return products.filter(p => {
+      const matchCategory = categoryFilter === 'all' || (p.category || 'limpeza') === categoryFilter;
+      const term = productSearch.toLowerCase();
+      const matchSearch = !term || (p.code || '').toLowerCase().includes(term) || (p.name || '').toLowerCase().includes(term);
+      return matchCategory && matchSearch;
+    });
+  }, [products, categoryFilter, productSearch]);
 
-  // ---------- MOVIMENTAÇÕES FILTRADAS ----------
+  // MOVIMENTAÇÕES FILTRADAS POR CATEGORIA E BUSCA
   const filteredMovements = useMemo(() => {
-    if (!movementSearch) return stockMovements;
-    const term = movementSearch.toLowerCase();
-    return stockMovements.filter(
-      m =>
-        (m.product_code || '').toLowerCase().includes(term) ||
-        (m.notes || '').toLowerCase().includes(term)
-    );
-  }, [stockMovements, movementSearch]);
+    return stockMovements.filter(m => {
+      const codeUpper = (m.product_code || '').toUpperCase();
+      const prodObj = products.find(p => (p.code || '').toUpperCase() === codeUpper);
+      const prodCat = prodObj?.category || 'limpeza';
+      const matchCategory = categoryFilter === 'all' || prodCat === categoryFilter;
+      const term = movementSearch.toLowerCase();
+      const matchSearch = !term || (m.product_code || '').toLowerCase().includes(term) || (m.notes || '').toLowerCase().includes(term);
+      return matchCategory && matchSearch;
+    });
+  }, [stockMovements, products, categoryFilter, movementSearch]);
 
-  // =========================================================================
   // MANIPULADORES DO FORMULÁRIO DE PRODUTOS
-  // =========================================================================
   const handleEditProduct = (prod) => {
     setEditingProductId(prod.id);
     setProductForm({
       code: prod.code || '',
       name: prod.name || '',
+      category: prod.category || 'limpeza',
       unit: prod.unit || 'UN',
       description: prod.description || ''
     });
@@ -162,7 +163,7 @@ export default function StockManagement({
 
   const handleCancelProductEdit = () => {
     setEditingProductId(null);
-    setProductForm({ code: '', name: '', unit: 'UN', description: '' });
+    setProductForm({ code: '', name: '', category: 'limpeza', unit: 'UN', description: '' });
   };
 
   const handleSubmitProduct = async (e) => {
@@ -172,7 +173,6 @@ export default function StockManagement({
       return;
     }
 
-    // Verificar se código já existe em outro produto
     const codeUpper = productForm.code.trim().toUpperCase();
     const existing = products.find(p => (p.code || '').trim().toUpperCase() === codeUpper && p.id !== editingProductId);
     if (existing) {
@@ -184,6 +184,7 @@ export default function StockManagement({
       ...(editingProductId ? { id: editingProductId } : {}),
       code: codeUpper,
       name: productForm.name.trim(),
+      category: productForm.category || 'limpeza',
       unit: productForm.unit,
       description: productForm.description.trim()
     });
@@ -191,9 +192,7 @@ export default function StockManagement({
     handleCancelProductEdit();
   };
 
-  // =========================================================================
   // MANIPULADORES DO FORMULÁRIO DE MOVIMENTAÇÃO
-  // =========================================================================
   const handleSubmitMovement = async (e) => {
     e.preventDefault();
     const codeUpper = (movementForm.product_code || '').trim().toUpperCase();
@@ -207,7 +206,6 @@ export default function StockManagement({
       return;
     }
 
-    // Buscar produto
     const targetProduct = products.find(p => (p.code || '').trim().toUpperCase() === codeUpper);
 
     await onSaveMovement({
@@ -219,7 +217,6 @@ export default function StockManagement({
       notes: movementForm.notes.trim()
     });
 
-    // Resetar quantidade e nota, mantendo a data
     setMovementForm({
       product_code: '',
       type: 'entrada',
@@ -237,11 +234,7 @@ export default function StockManagement({
     setSubTab('movements');
   };
 
-  // =========================================================================
   // EXPORTAÇÕES (CSV & IMPRESSÃO PDF)
-  // =========================================================================
-
-  // 1. Exportar Movimentações por Data Selecionada
   const movementsBySelectedDate = useMemo(() => {
     if (!selectedReportDate) return [];
     return stockMovements.filter(m => m.date === selectedReportDate);
@@ -265,18 +258,19 @@ export default function StockManagement({
     }
 
     let csv = "data:text/csv;charset=utf-8,";
-    csv += "Data;Codigo Produto;Nome do Produto;Unidade;Tipo Movimentacao;Quantidade;Observacao\n";
+    csv += "Data;Codigo Produto;Nome do Produto;Categoria;Unidade;Tipo Movimentacao;Quantidade;Observacao\n";
 
     movementsBySelectedDate.forEach(m => {
       const code = m.product_code || '';
       const prodObj = products.find(p => (p.code || '').toUpperCase() === code.toUpperCase());
       const prodName = prodObj ? prodObj.name : 'Produto Desconhecido';
+      const catLabel = prodObj?.category === 'manutencao' ? 'Manutenção' : 'Limpeza';
       const unit = prodObj ? prodObj.unit : 'UN';
       const typeLabel = m.type === 'entrada' ? 'ENTRADA (+)' : 'SAIDA (-)';
       const qty = m.quantity || 0;
       const obs = (m.notes || '').replace(/;/g, ' ');
 
-      csv += `${m.date};${code};${prodName};${unit};${typeLabel};${qty};${obs}\n`;
+      csv += `${m.date};${code};${prodName};${catLabel};${unit};${typeLabel};${qty};${obs}\n`;
     });
 
     const encodedUri = encodeURI(csv);
@@ -288,7 +282,6 @@ export default function StockManagement({
     document.body.removeChild(link);
   };
 
-  // 2. Exportar Movimentações por Produto Selecionado
   const selectedProductObj = useMemo(() => {
     if (!selectedReportProductCode) return null;
     return products.find(p => (p.code || '').toUpperCase() === selectedReportProductCode.toUpperCase()) || null;
@@ -302,7 +295,6 @@ export default function StockManagement({
       .sort((a, b) => new Date(a.date || a.created_at) - new Date(b.date || b.created_at));
   }, [stockMovements, selectedReportProductCode]);
 
-  // Histórico com cálculo de saldo acumulado por movimentação
   const productMovementLedger = useMemo(() => {
     let runningBalance = 0;
     let totalEntries = 0;
@@ -362,18 +354,28 @@ export default function StockManagement({
     window.print();
   };
 
-  // Stats gerais do topo
-  const overallStats = useMemo(() => {
-    const totalProducts = products.length;
-    let totalStockItems = 0;
-    let lowStockCount = 0;
-    
+  // Indicadores de Estoque separados por Categoria (Limpeza vs Manutenção)
+  const categoryStats = useMemo(() => {
+    const limpezaProds = products.filter(p => (p.category || 'limpeza') === 'limpeza');
+    const manutencaoProds = products.filter(p => p.category === 'manutencao');
+
+    let totalLimpezaQty = 0;
+    let totalManutencaoQty = 0;
+
     Object.values(stockLevels).forEach(info => {
-      totalStockItems += Math.max(0, info.currentStock);
-      if (info.currentStock <= 5) lowStockCount++;
+      const cat = info.product?.category || 'limpeza';
+      const qty = Math.max(0, info.currentStock);
+      if (cat === 'limpeza') totalLimpezaQty += qty;
+      if (cat === 'manutencao') totalManutencaoQty += qty;
     });
 
-    return { totalProducts, totalStockItems, lowStockCount };
+    return {
+      limpezaCount: limpezaProds.length,
+      limpezaQty: totalLimpezaQty,
+      manutencaoCount: manutencaoProds.length,
+      manutencaoQty: totalManutencaoQty,
+      totalProds: products.length
+    };
   }, [products, stockLevels]);
 
   return (
@@ -404,15 +406,15 @@ export default function StockManagement({
           </div>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Controle & Gestão de Estoque
+              Gestão de Estoque: Limpeza & Manutenção
             </h2>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Cadastro de produtos, movimentações (entrada/saída) e exportação de relatórios por data ou produto.
+              Controle de materiais setorizados por 🧹 <strong>Limpeza</strong> e 🔧 <strong>Manutenção</strong>.
             </p>
           </div>
         </div>
 
-        {/* NAVEGAÇÃO INTERNA DE SUB-ABAS */}
+        {/* NAVEGAÇÃO DE SUB-ABAS */}
         <div style={{
           display: 'flex',
           background: 'var(--bg-secondary)',
@@ -442,114 +444,152 @@ export default function StockManagement({
             onClick={() => setSubTab('reports')}
           >
             <FileText size={15} />
-            Exportar / Relatórios
+            Relatórios / CSV
           </button>
         </div>
       </div>
 
-      {/* CARDS DE INDICADORES RÁPIDOS */}
+      {/* FILTROS DE CATEGORIA (TODOS, LIMPEZA, MANUTENÇÃO) E CARDS */}
       <div className="no-print" style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
         gap: '1rem'
       }}>
-        <div className="clean-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ background: 'var(--accent-blue-subtle)', color: 'var(--accent-blue)', padding: '0.75rem', borderRadius: 'var(--radius-md)' }}>
-            <Package size={22} />
-          </div>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Produtos Cadastrados</span>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              {overallStats.totalProducts}
+        {/* CARD ESTOQUE LIMPEZA */}
+        <div
+          className="clean-card"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderLeft: '4px solid var(--accent-emerald)',
+            cursor: 'pointer',
+            background: categoryFilter === 'limpeza' ? 'var(--accent-emerald-subtle)' : 'var(--bg-card)'
+          }}
+          onClick={() => setCategoryFilter(categoryFilter === 'limpeza' ? 'all' : 'limpeza')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div style={{ background: 'var(--accent-emerald-subtle)', color: 'var(--accent-emerald)', padding: '0.75rem', borderRadius: 'var(--radius-md)' }}>
+              <Sparkles size={22} />
+            </div>
+            <div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Estoque Limpeza</span>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                {categoryStats.limpezaCount} produtos
+              </div>
+              <span style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 600 }}>Saldo Total: {categoryStats.limpezaQty} un.</span>
             </div>
           </div>
         </div>
 
-        <div className="clean-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ background: 'var(--accent-emerald-subtle)', color: 'var(--accent-emerald)', padding: '0.75rem', borderRadius: 'var(--radius-md)' }}>
-            <ArrowUpRight size={22} />
-          </div>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Total em Saldo de Estoque</span>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent-emerald)' }}>
-              {overallStats.totalStockItems} un.
+        {/* CARD ESTOQUE MANUTENÇÃO */}
+        <div
+          className="clean-card"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderLeft: '4px solid var(--accent-blue)',
+            cursor: 'pointer',
+            background: categoryFilter === 'manutencao' ? 'var(--accent-blue-subtle)' : 'var(--bg-card)'
+          }}
+          onClick={() => setCategoryFilter(categoryFilter === 'manutencao' ? 'all' : 'manutencao')}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div style={{ background: 'var(--accent-blue-subtle)', color: 'var(--accent-blue)', padding: '0.75rem', borderRadius: 'var(--radius-md)' }}>
+              <Wrench size={22} />
+            </div>
+            <div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Estoque Manutenção</span>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                {categoryStats.manutencaoCount} produtos
+              </div>
+              <span style={{ fontSize: '0.75rem', color: 'var(--accent-blue)', fontWeight: 600 }}>Saldo Total: {categoryStats.manutencaoQty} un.</span>
             </div>
           </div>
         </div>
 
-        <div className="clean-card" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ background: 'var(--accent-amber-subtle)', color: 'var(--accent-amber)', padding: '0.75rem', borderRadius: 'var(--radius-md)' }}>
-            <AlertTriangle size={22} />
-          </div>
-          <div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Estoque Baixo (≤ 5)</span>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--accent-amber)' }}>
-              {overallStats.lowStockCount} itens
-            </div>
+        {/* BOTÕES DE SELEÇÃO DE CATEGORIA */}
+        <div className="clean-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Filtrar Visualização:</span>
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <button
+              className={`btn btn-sm ${categoryFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ flex: 1 }}
+              onClick={() => setCategoryFilter('all')}
+            >
+              Todos ({categoryStats.totalProds})
+            </button>
+            <button
+              className={`btn btn-sm ${categoryFilter === 'limpeza' ? 'btn-emerald' : 'btn-secondary'}`}
+              style={{ flex: 1 }}
+              onClick={() => setCategoryFilter('limpeza')}
+            >
+              🧹 Limpeza
+            </button>
+            <button
+              className={`btn btn-sm ${categoryFilter === 'manutencao' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ flex: 1 }}
+              onClick={() => setCategoryFilter('manutencao')}
+            >
+              🔧 Manutenção
+            </button>
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* ABA 1: MOVIMENTAÇÃO DE ESTOQUE (ENTRADA / SAÍDA COM AUTO-BUSCA DE CÓDIGO) */}
+      {/* ABA 1: MOVIMENTAÇÃO DE ESTOQUE (ENTRADA / SAÍDA) */}
       {/* ========================================================================= */}
       {subTab === 'movements' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-          {/* PAINEL DE REGISTRO DE MOVIMENTAÇÃO */}
+          {/* FORMULÁRIO DE REGISTRO DE MOVIMENTAÇÃO */}
           <div className="clean-card" style={{ borderLeft: '4px solid var(--accent-blue)' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <RefreshCw size={18} color="var(--accent-blue)" />
-              Registrar Movimentação de Estoque (Entrada ou Saída)
+              Registrar Entrada ou Saída de Estoque
             </h3>
 
             <form onSubmit={handleSubmitMovement}>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                 gap: '1rem',
                 marginBottom: '1rem'
               }}>
 
-                {/* DIGITE O CÓDIGO (AUTO-PUXA OS DADOS AO DIGITAR) */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Código do Produto *</label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="Ex: PRD001"
-                      value={movementForm.product_code}
-                      onChange={e => setMovementForm({ ...movementForm, product_code: e.target.value })}
-                      style={{ textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}
-                      required
-                    />
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                    Digite o código exato para buscar automaticamente.
-                  </span>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Ex: PRD001, LIM-01, MAN-02"
+                    value={movementForm.product_code}
+                    onChange={e => setMovementForm({ ...movementForm, product_code: e.target.value })}
+                    style={{ textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}
+                    required
+                  />
                 </div>
 
-                {/* SELETOR RÁPIDO SE NÃO SOUBER O CÓDIGO DE CABEÇA */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Ou Selecione na Lista</label>
+                  <label className="form-label">Ou Selecione por Nome</label>
                   <select
                     className="form-select"
                     value={movementForm.product_code}
                     onChange={e => setMovementForm({ ...movementForm, product_code: e.target.value })}
                   >
-                    <option value="">-- Selecionar por Nome --</option>
+                    <option value="">-- Selecionar Produto --</option>
                     {products.map(p => (
                       <option key={p.id} value={p.code}>
-                        [{p.code}] {p.name} ({p.unit})
+                        [{p.category === 'manutencao' ? '🔧 Manutenção' : '🧹 Limpeza'}] {p.code} - {p.name}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* TIPO DE MOVIMENTAÇÃO (ENTRADA / SAÍDA) */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Tipo de Movimentação *</label>
+                  <label className="form-label">Tipo de Operação *</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
                       type="button"
@@ -572,7 +612,6 @@ export default function StockManagement({
                   </div>
                 </div>
 
-                {/* QUANTIDADE */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Quantidade *</label>
                   <input
@@ -586,9 +625,8 @@ export default function StockManagement({
                   />
                 </div>
 
-                {/* DATA DA MOVIMENTAÇÃO */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Data da Operação *</label>
+                  <label className="form-label">Data *</label>
                   <input
                     type="date"
                     className="form-input"
@@ -600,8 +638,7 @@ export default function StockManagement({
 
               </div>
 
-              {/* PAINEL DE PREVISÃO E INFORMAÇÕES AUTOMÁTICAS DO PRODUTO DIGITADO */}
-              {activeMovementProduct ? (
+              {activeMovementProduct && (
                 <div style={{
                   background: movementForm.type === 'entrada' ? 'var(--accent-emerald-subtle)' : 'var(--accent-blue-subtle)',
                   border: '1px solid var(--border-color)',
@@ -616,58 +653,34 @@ export default function StockManagement({
                 }}>
                   <div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
-                      Produto Encontrado:
+                      Setor: <strong>{activeMovementProduct.category === 'manutencao' ? '🔧 Manutenção' : '🧹 Limpeza'}</strong>
                     </div>
                     <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                       [{activeMovementProduct.code}] {activeMovementProduct.name}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      Unidade de Medida: <strong>{activeMovementProduct.unit}</strong> | Descrição: {activeMovementProduct.description || 'Sem descrição'}
-                    </div>
                   </div>
 
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Estoque Atual</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Estoque Atual</div>
                     <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>
                       {activeMovementProduct.currentStock} {activeMovementProduct.unit}
                     </div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: movementForm.type === 'entrada' ? '#047857' : '#b91c1c' }}>
-                      {movementForm.type === 'entrada'
-                        ? `Após lançamento: ${activeMovementProduct.currentStock + (Number(movementForm.quantity) || 0)} ${activeMovementProduct.unit}`
-                        : `Após lançamento: ${activeMovementProduct.currentStock - (Number(movementForm.quantity) || 0)} ${activeMovementProduct.unit}`}
-                    </div>
                   </div>
                 </div>
-              ) : movementForm.product_code.trim() ? (
-                <div style={{
-                  background: 'var(--accent-amber-subtle)',
-                  color: 'var(--accent-amber)',
-                  padding: '0.75rem 1rem',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.85rem',
-                  marginBottom: '1rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}>
-                  <AlertTriangle size={16} />
-                  <span>Código <strong>{movementForm.product_code.toUpperCase()}</strong> não cadastrado previamente. Você pode realizar a movimentação e depois registrar o produto, se desejar.</span>
-                </div>
-              ) : null}
+              )}
 
-              {/* OBSERVAÇÃO / RESPONSÁVEL */}
               <div className="form-group">
-                <label className="form-label">Observação / Nota Fiscal / Responsável (Opcional)</label>
+                <label className="form-label">Observação / Responsável (Opcional)</label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Ex: Retirado por João para obras, NF 1234, Compra de fornecedor"
+                  placeholder="Ex: Retirado por João para limpeza do pavilhão B / Peça para manutenção do motor"
                   value={movementForm.notes}
                   onChange={e => setMovementForm({ ...movementForm, notes: e.target.value })}
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="submit" className={`btn ${movementForm.type === 'entrada' ? 'btn-emerald' : 'btn-primary'}`}>
                   {movementForm.type === 'entrada' ? <ArrowUpRight size={16} /> : <ArrowDownLeft size={16} />}
                   Confirmar Lançamento de {movementForm.type === 'entrada' ? 'Entrada' : 'Saída'}
@@ -677,18 +690,11 @@ export default function StockManagement({
             </form>
           </div>
 
-          {/* HISTÓRICO RECENTE DE MOVIMENTAÇÕES */}
+          {/* HISTÓRICO DE MOVIMENTAÇÕES */}
           <div className="clean-card">
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '1rem',
-              flexWrap: 'wrap',
-              gap: '1rem'
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
               <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>
-                Histórico Geral de Movimentações ({filteredMovements.length})
+                Histórico de Movimentações {categoryFilter !== 'all' ? `(${categoryFilter.toUpperCase()})` : ''} ({filteredMovements.length})
               </h3>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '240px' }}>
@@ -696,7 +702,7 @@ export default function StockManagement({
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Buscar por código ou observação..."
+                  placeholder="Buscar movimentação..."
                   value={movementSearch}
                   onChange={e => setMovementSearch(e.target.value)}
                   style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
@@ -710,6 +716,7 @@ export default function StockManagement({
                   <tr>
                     <th>Data</th>
                     <th>Código</th>
+                    <th>Setor</th>
                     <th>Produto / Descrição</th>
                     <th>Tipo</th>
                     <th>Quantidade</th>
@@ -720,14 +727,15 @@ export default function StockManagement({
                 <tbody>
                   {filteredMovements.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                        Nenhuma movimentação de estoque registrada até o momento.
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        Nenhuma movimentação encontrada para esta categoria.
                       </td>
                     </tr>
                   ) : (
                     filteredMovements.map(m => {
                       const codeUpper = (m.product_code || '').toUpperCase();
                       const prodObj = products.find(p => (p.code || '').toUpperCase() === codeUpper);
+                      const cat = prodObj?.category || 'limpeza';
 
                       return (
                         <tr key={m.id}>
@@ -741,39 +749,32 @@ export default function StockManagement({
                               {codeUpper}
                             </button>
                           </td>
+                          <td>
+                            <span className="badge" style={{
+                              background: cat === 'manutencao' ? 'var(--accent-blue-subtle)' : 'var(--accent-emerald-subtle)',
+                              color: cat === 'manutencao' ? 'var(--accent-blue)' : '#047857',
+                              fontWeight: 700
+                            }}>
+                              {cat === 'manutencao' ? '🔧 Manutenção' : '🧹 Limpeza'}
+                            </span>
+                          </td>
                           <td style={{ fontWeight: 600 }}>
-                            {prodObj ? (
-                              <span>{prodObj.name} <small style={{ color: 'var(--text-muted)' }}>({prodObj.unit})</small></span>
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)' }}>Produto {codeUpper}</span>
-                            )}
+                            {prodObj ? prodObj.name : `Produto ${codeUpper}`}
                           </td>
                           <td>
                             {m.type === 'entrada' ? (
-                              <span className="badge badge-active">
-                                <ArrowUpRight size={13} /> Entrada (+)
-                              </span>
+                              <span className="badge badge-active"><ArrowUpRight size={13} /> Entrada (+)</span>
                             ) : (
-                              <span className="badge badge-inactive">
-                                <ArrowDownLeft size={13} /> Saída (-)
-                              </span>
+                              <span className="badge badge-inactive"><ArrowDownLeft size={13} /> Saída (-)</span>
                             )}
                           </td>
-                          <td style={{ fontWeight: 800, fontSize: '0.95rem' }}>
-                            {m.quantity} {prodObj?.unit || ''}
-                          </td>
-                          <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                            {m.notes || '--'}
-                          </td>
+                          <td style={{ fontWeight: 800 }}>{m.quantity} {prodObj?.unit || ''}</td>
+                          <td style={{ fontSize: '0.85rem' }}>{m.notes || '--'}</td>
                           <td style={{ textAlign: 'right' }}>
                             <button
                               className="btn btn-sm btn-rose"
-                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                              title="Excluir movimentação"
                               onClick={() => {
-                                if (window.confirm('Tem certeza que deseja excluir esta movimentação?')) {
-                                  onDeleteMovement(m.id);
-                                }
+                                if (window.confirm('Excluir esta movimentação?')) onDeleteMovement(m.id);
                               }}
                             >
                               <Trash2 size={13} />
@@ -786,23 +787,21 @@ export default function StockManagement({
                 </tbody>
               </table>
             </div>
-
           </div>
 
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* ABA 2: CADASTRO E GERENCIAMENTO DE PRODUTOS */}
+      {/* ABA 2: CADASTRO DE PRODUTOS COM CATEGORIA (LIMPEZA vs MANUTENÇÃO) */}
       {/* ========================================================================= */}
       {subTab === 'products' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-          {/* FORMULÁRIO DE CADASTRO / EDIÇÃO */}
           <div className="clean-card">
             <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Package size={18} color="var(--accent-blue)" />
-              {editingProductId ? 'Editar Cadastro de Produto' : 'Novo Cadastro de Produto'}
+              {editingProductId ? 'Editar Produto' : 'Cadastrar Novo Produto de Estoque'}
             </h3>
 
             <form onSubmit={handleSubmitProduct}>
@@ -813,34 +812,44 @@ export default function StockManagement({
                 marginBottom: '1rem'
               }}>
 
-                {/* CÓDIGO */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Código do Produto (SKU / Código de Barras) *</label>
+                  <label className="form-label">Setor / Categoria do Estoque *</label>
+                  <select
+                    className="form-select"
+                    value={productForm.category}
+                    onChange={e => setProductForm({ ...productForm, category: e.target.value })}
+                    required
+                  >
+                    <option value="limpeza">🧹 Estoque de Limpeza</option>
+                    <option value="manutencao">🔧 Estoque de Manutenção</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Código do Produto (SKU) *</label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Ex: PRD001, CAP-EPI, TIN-18L"
+                    placeholder="Ex: LIM-001, MAN-50, PRD-10"
                     value={productForm.code}
                     onChange={e => setProductForm({ ...productForm, code: e.target.value })}
-                    style={{ textTransform: 'toUpperCase', fontWeight: 700 }}
+                    style={{ textTransform: 'uppercase', fontWeight: 700 }}
                     required
                   />
                 </div>
 
-                {/* NOME DO OBJETO */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Nome do Objeto / Produto *</label>
+                  <label className="form-label">Nome do Produto *</label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Ex: Capacete de Segurança com carneira"
+                    placeholder="Ex: Detergente Clorado 5L / Chave Combinada 13mm"
                     value={productForm.name}
                     onChange={e => setProductForm({ ...productForm, name: e.target.value })}
                     required
                   />
                 </div>
 
-                {/* UNIDADE DE MEDIDA */}
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Unidade de Medida *</label>
                   <select
@@ -857,13 +866,12 @@ export default function StockManagement({
 
               </div>
 
-              {/* DESCRIÇÃO OPCIONAL */}
               <div className="form-group">
                 <label className="form-label">Descrição Opcional</label>
                 <textarea
                   className="form-input"
                   rows="2"
-                  placeholder="Informações adicionais, marca, especificações técnicas..."
+                  placeholder="Especificações, marca, setor de armazenamento..."
                   value={productForm.description}
                   onChange={e => setProductForm({ ...productForm, description: e.target.value })}
                 />
@@ -875,7 +883,7 @@ export default function StockManagement({
                     Cancelar Edição
                   </button>
                 )}
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="btn btn-emerald">
                   <Plus size={16} />
                   {editingProductId ? 'Salvar Alterações' : 'Cadastrar Produto'}
                 </button>
@@ -886,16 +894,9 @@ export default function StockManagement({
 
           {/* LISTA DE PRODUTOS CADASTRADOS */}
           <div className="clean-card">
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: '1rem',
-              flexWrap: 'wrap',
-              gap: '1rem'
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
               <h3 style={{ fontSize: '1.05rem', fontWeight: 800 }}>
-                Produtos Cadastrados ({filteredProducts.length})
+                Produtos Cadastrados {categoryFilter !== 'all' ? `(${categoryFilter.toUpperCase()})` : ''} ({filteredProducts.length})
               </h3>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '240px' }}>
@@ -903,7 +904,7 @@ export default function StockManagement({
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="Filtrar por nome ou código..."
+                  placeholder="Filtrar produtos..."
                   value={productSearch}
                   onChange={e => setProductSearch(e.target.value)}
                   style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
@@ -915,8 +916,9 @@ export default function StockManagement({
               <table className="custom-table">
                 <thead>
                   <tr>
+                    <th>Setor</th>
                     <th>Código</th>
-                    <th>Nome do Objeto</th>
+                    <th>Nome do Produto</th>
                     <th>Unidade</th>
                     <th>Descrição</th>
                     <th>Estoque Atual</th>
@@ -926,8 +928,8 @@ export default function StockManagement({
                 <tbody>
                   {filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                        Nenhum produto cadastrado.
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        Nenhum produto cadastrado nesta categoria.
                       </td>
                     </tr>
                   ) : (
@@ -935,19 +937,25 @@ export default function StockManagement({
                       const codeUpper = (p.code || '').toUpperCase();
                       const stockInfo = stockLevels[codeUpper] || { currentStock: 0 };
                       const currentStock = stockInfo.currentStock;
+                      const cat = p.category || 'limpeza';
 
                       return (
                         <tr key={p.id}>
+                          <td>
+                            <span className="badge" style={{
+                              background: cat === 'manutencao' ? 'var(--accent-blue-subtle)' : 'var(--accent-emerald-subtle)',
+                              color: cat === 'manutencao' ? 'var(--accent-blue)' : '#047857',
+                              fontWeight: 700
+                            }}>
+                              {cat === 'manutencao' ? '🔧 Manutenção' : '🧹 Limpeza'}
+                            </span>
+                          </td>
                           <td style={{ fontFamily: 'monospace', fontWeight: 800, color: 'var(--accent-blue)' }}>
                             {codeUpper}
                           </td>
                           <td style={{ fontWeight: 700 }}>{p.name}</td>
-                          <td>
-                            <span className="badge badge-abono">{p.unit}</span>
-                          </td>
-                          <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                            {p.description || '--'}
-                          </td>
+                          <td><span className="badge badge-abono">{p.unit}</span></td>
+                          <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{p.description || '--'}</td>
                           <td>
                             <span style={{
                               fontWeight: 800,
@@ -961,29 +969,20 @@ export default function StockManagement({
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem' }}>
                               <button
                                 className="btn btn-sm btn-emerald"
-                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                                title="Movimentar estoque deste produto"
                                 onClick={() => handleQuickSelectCode(codeUpper)}
                               >
-                                <ArrowUpRight size={13} />
-                                Movimentar
+                                <ArrowUpRight size={13} /> Movimentar
                               </button>
                               <button
                                 className="btn btn-sm btn-secondary"
-                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                                title="Editar produto"
                                 onClick={() => handleEditProduct(p)}
                               >
                                 <Edit3 size={13} />
                               </button>
                               <button
                                 className="btn btn-sm btn-rose"
-                                style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
-                                title="Excluir produto"
                                 onClick={() => {
-                                  if (window.confirm(`Deseja excluir o produto ${p.name} (${codeUpper})?`)) {
-                                    onDeleteProduct(p.id);
-                                  }
+                                  if (window.confirm(`Excluir ${p.name}?`)) onDeleteProduct(p.id);
                                 }}
                               >
                                 <Trash2 size={13} />
@@ -1004,61 +1003,47 @@ export default function StockManagement({
       )}
 
       {/* ========================================================================= */}
-      {/* ABA 3: RELATÓRIOS & EXPORTAÇÕES (POR DATA SELECIONADA OU POR ESTOQUE) */}
+      {/* ABA 3: RELATÓRIOS */}
       {/* ========================================================================= */}
       {subTab === 'reports' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-          {/* PAINEL DE SELEÇÃO DE MODALIDADE DE RELATÓRIO */}
-          <div className="clean-card no-print" style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '1rem'
-          }}>
+          <div className="clean-card no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 className={`btn ${reportMode === 'by_date' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setReportMode('by_date')}
               >
-                <Calendar size={16} />
-                Exportar Movimentações por Data Selecionada
+                <Calendar size={16} /> Movimentações por Data
               </button>
               <button
                 className={`btn ${reportMode === 'by_product' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setReportMode('by_product')}
               >
-                <Package size={16} />
-                Exportar Extrato por Produto / Estoque
+                <Package size={16} /> Extrato por Produto
               </button>
             </div>
 
             <div>
               {reportMode === 'by_date' ? (
                 <button className="btn btn-emerald" onClick={handleExportDateCSV}>
-                  <Download size={16} />
-                  Exportar CSV (Data {selectedReportDate})
+                  <Download size={16} /> Exportar CSV
                 </button>
               ) : (
                 <button className="btn btn-emerald" onClick={handleExportProductCSV}>
-                  <Download size={16} />
-                  Exportar CSV (Produto {selectedReportProductCode || 'Nenhum'})
+                  <Download size={16} /> Exportar CSV
                 </button>
               )}
               <button className="btn btn-primary" onClick={handlePrint} style={{ marginLeft: '0.5rem' }}>
-                <Printer size={16} />
-                Imprimir / Exportar PDF
+                <Printer size={16} /> Imprimir PDF
               </button>
             </div>
           </div>
 
-          {/* SEÇÃO 1: EXPORTAR POR DATA SELECIONADA */}
           {reportMode === 'by_date' && (
             <div className="clean-card print-only-sheet">
-
               <div className="no-print" style={{ marginBottom: '1.25rem', maxWidth: '300px' }}>
-                <label className="form-label">Selecione a Data para Exportação</label>
+                <label className="form-label">Data para Exportação</label>
                 <input
                   type="date"
                   className="form-input"
@@ -1067,106 +1052,45 @@ export default function StockManagement({
                 />
               </div>
 
-              {/* CABEÇALHO IMPRESSÃO */}
-              <div style={{
-                borderBottom: '2px solid var(--border-color)',
-                paddingBottom: '0.75rem',
-                marginBottom: '1.25rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div>
-                  <h2 style={{ fontSize: '1.3rem', fontWeight: 800, textTransform: 'uppercase' }}>
-                    RELATÓRIO DE MOVIMENTAÇÕES DE ESTOQUE
-                  </h2>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                    Data Selecionada: <strong>{selectedReportDate}</strong>
-                  </p>
-                </div>
-                <div style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  <strong>SISTEMA PONTO & ESTOQUE</strong>
-                  <div>Emissão: {new Date().toLocaleDateString('pt-BR')} {new Date().toLocaleTimeString('pt-BR')}</div>
-                </div>
-              </div>
-
-              {/* QUADRO RESUMO DA DATA */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: '1rem',
-                marginBottom: '1.25rem'
-              }}>
-                <div style={{ background: 'var(--accent-blue-subtle)', padding: '0.85rem', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--accent-blue)', textTransform: 'uppercase', fontWeight: 700 }}>Total de Operações</span>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--accent-blue)' }}>{dateReportTotals.totalOps}</div>
-                </div>
-                <div style={{ background: 'var(--accent-emerald-subtle)', padding: '0.85rem', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#047857', textTransform: 'uppercase', fontWeight: 700 }}>Total Entradas (+)</span>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#047857' }}>+{dateReportTotals.entries} un.</div>
-                </div>
-                <div style={{ background: 'var(--accent-rose-subtle)', padding: '0.85rem', borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#b91c1c', textTransform: 'uppercase', fontWeight: 700 }}>Total Saídas (-)</span>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#b91c1c' }}>-{dateReportTotals.exits} un.</div>
-                </div>
-              </div>
-
-              {/* TABELA DE MOVIMENTAÇÕES DA DATA */}
               <div className="table-responsive">
                 <table className="custom-table">
                   <thead>
                     <tr>
                       <th>Código</th>
                       <th>Produto</th>
-                      <th>Unidade</th>
+                      <th>Setor</th>
                       <th>Tipo</th>
                       <th>Quantidade</th>
-                      <th>Observação / Responsável</th>
+                      <th>Observação</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {movementsBySelectedDate.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                          Nenhuma movimentação realizada na data {selectedReportDate}.
-                        </td>
-                      </tr>
-                    ) : (
-                      movementsBySelectedDate.map(m => {
-                        const codeUpper = (m.product_code || '').toUpperCase();
-                        const prodObj = products.find(p => (p.code || '').toUpperCase() === codeUpper);
+                    {movementsBySelectedDate.map(m => {
+                      const codeUpper = (m.product_code || '').toUpperCase();
+                      const prodObj = products.find(p => (p.code || '').toUpperCase() === codeUpper);
+                      const cat = prodObj?.category || 'limpeza';
 
-                        return (
-                          <tr key={m.id}>
-                            <td style={{ fontFamily: 'monospace', fontWeight: 800 }}>{codeUpper}</td>
-                            <td style={{ fontWeight: 700 }}>{prodObj ? prodObj.name : 'Produto'}</td>
-                            <td>{prodObj?.unit || 'UN'}</td>
-                            <td>
-                              {m.type === 'entrada' ? (
-                                <span className="badge badge-active">+ Entrada</span>
-                              ) : (
-                                <span className="badge badge-inactive">- Saída</span>
-                              )}
-                            </td>
-                            <td style={{ fontWeight: 800 }}>{m.quantity}</td>
-                            <td style={{ fontSize: '0.85rem' }}>{m.notes || '--'}</td>
-                          </tr>
-                        );
-                      })
-                    )}
+                      return (
+                        <tr key={m.id}>
+                          <td style={{ fontFamily: 'monospace', fontWeight: 800 }}>{codeUpper}</td>
+                          <td style={{ fontWeight: 700 }}>{prodObj ? prodObj.name : 'Produto'}</td>
+                          <td>{cat === 'manutencao' ? 'Manutenção' : 'Limpeza'}</td>
+                          <td>{m.type === 'entrada' ? '+ Entrada' : '- Saída'}</td>
+                          <td style={{ fontWeight: 800 }}>{m.quantity} {prodObj?.unit || ''}</td>
+                          <td>{m.notes || '--'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-
             </div>
           )}
 
-          {/* SEÇÃO 2: EXPORTAR MOVIMENTAÇÃO DE CADA ESTOQUE / PRODUTO */}
           {reportMode === 'by_product' && (
             <div className="clean-card print-only-sheet">
-
               <div className="no-print" style={{ marginBottom: '1.25rem', maxWidth: '360px' }}>
-                <label className="form-label">Selecione o Produto para Exportar Movimentações</label>
+                <label className="form-label">Selecione o Produto</label>
                 <select
                   className="form-select"
                   value={selectedReportProductCode}
@@ -1175,118 +1099,38 @@ export default function StockManagement({
                   <option value="">-- Selecione o Produto --</option>
                   {products.map(p => (
                     <option key={p.id} value={p.code}>
-                      [{p.code}] {p.name} ({p.unit})
+                      [{p.category === 'manutencao' ? 'Manutenção' : 'Limpeza'}] {p.code} - {p.name}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {!selectedProductObj ? (
-                <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                  <Package size={48} style={{ marginBottom: '1rem' }} />
-                  <h3>Selecione um produto no menu acima para visualizar e exportar seu extrato completo.</h3>
-                </div>
-              ) : (
-                <div>
-                  {/* CABEÇALHO IMPRESSÃO PRODUTO */}
-                  <div style={{
-                    borderBottom: '2px solid var(--border-color)',
-                    paddingBottom: '0.75rem',
-                    marginBottom: '1.25rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <h2 style={{ fontSize: '1.3rem', fontWeight: 800, textTransform: 'uppercase' }}>
-                        EXTRATO DE MOVIMENTAÇÃO DE ESTOQUE
-                      </h2>
-                      <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                        Produto: <strong>[{selectedProductObj.code}] {selectedProductObj.name}</strong> ({selectedProductObj.unit})
-                      </p>
-                    </div>
-                    <div style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      <strong>RELATÓRIO INDIVIDUAL DE ESTOQUE</strong>
-                      <div>Emissão: {new Date().toLocaleDateString('pt-BR')}</div>
-                    </div>
-                  </div>
-
-                  {/* RESUMO DO PRODUTO */}
-                  <div style={{
-                    background: 'var(--bg-subtle)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '1rem',
-                    marginBottom: '1.25rem',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                    gap: '1rem'
-                  }}>
-                    <div>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Entradas</span>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#047857' }}>
-                        +{productMovementLedger.totalEntries} {selectedProductObj.unit}
-                      </div>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Saídas</span>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#b91c1c' }}>
-                        -{productMovementLedger.totalExits} {selectedProductObj.unit}
-                      </div>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saldo Atual em Estoque</span>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent-blue)' }}>
-                        {productMovementLedger.finalBalance} {selectedProductObj.unit}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* TABELA DE EXTRATO DO PRODUTO */}
-                  <div className="table-responsive">
-                    <table className="custom-table">
-                      <thead>
-                        <tr>
-                          <th>Data</th>
-                          <th>Tipo</th>
-                          <th>Quantidade</th>
-                          <th>Saldo Resultante</th>
-                          <th>Observação / Responsável</th>
+              {selectedProductObj && (
+                <div className="table-responsive">
+                  <table className="custom-table">
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th>Tipo</th>
+                        <th>Quantidade</th>
+                        <th>Saldo Resultante</th>
+                        <th>Observação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productMovementLedger.rows.map(row => (
+                        <tr key={row.id}>
+                          <td style={{ fontFamily: 'monospace' }}>{row.date}</td>
+                          <td>{row.type === 'entrada' ? '+ Entrada' : '- Saída'}</td>
+                          <td style={{ fontWeight: 800 }}>{row.quantity} {selectedProductObj.unit}</td>
+                          <td style={{ fontWeight: 800, color: 'var(--accent-blue)' }}>{row.balanceAfter} {selectedProductObj.unit}</td>
+                          <td>{row.notes || '--'}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {productMovementLedger.rows.length === 0 ? (
-                          <tr>
-                            <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                              Nenhuma movimentação registrada para este produto.
-                            </td>
-                          </tr>
-                        ) : (
-                          productMovementLedger.rows.map(row => (
-                            <tr key={row.id}>
-                              <td style={{ fontFamily: 'monospace', fontWeight: 600 }}>{row.date}</td>
-                              <td>
-                                {row.type === 'entrada' ? (
-                                  <span className="badge badge-active">+ Entrada</span>
-                                ) : (
-                                  <span className="badge badge-inactive">- Saída</span>
-                                )}
-                              </td>
-                              <td style={{ fontWeight: 800 }}>{row.quantity} {selectedProductObj.unit}</td>
-                              <td style={{ fontWeight: 800, color: 'var(--accent-blue)' }}>
-                                {row.balanceAfter} {selectedProductObj.unit}
-                              </td>
-                              <td style={{ fontSize: '0.85rem' }}>{row.notes || '--'}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
-
             </div>
           )}
 

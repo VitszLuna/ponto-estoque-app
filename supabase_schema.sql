@@ -2,23 +2,28 @@
 -- ESQUEMA COMPLETO DE BANCO DE DADOS SUPABASE / POSTGRESQL - PONTO & ESTOQUE
 -- =============================================================================
 -- Execute este script completo no SQL Editor do seu projeto Supabase (https://app.supabase.com)
--- para criar todas as tabelas, índices e políticas de segurança.
+-- Ele criará todas as tabelas com suporte a Nº de Matrícula, Carga Horária CLT (8h48m),
+-- Estoque Setorizado (Limpeza vs Manutenção) e permissões completas de acesso.
 -- =============================================================================
 
 -- 1. TABELA DE FUNCIONÁRIOS (employees)
 CREATE TABLE IF NOT EXISTS public.employees (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    cpf TEXT,
+    matricula TEXT,                      -- Nº de Matrícula do funcionário
+    cpf TEXT,                            -- Campo opcional de CPF
     role TEXT NOT NULL DEFAULT 'Funcionário',
     department TEXT NOT NULL DEFAULT 'Geral',
-    standard_daily_hours NUMERIC(4,2) DEFAULT 8.80, -- Padrão CLT 8 horas e 48 minutos (8.8h)
-    work_saturdays BOOLEAN DEFAULT FALSE,
+    standard_daily_hours NUMERIC(4,2) DEFAULT 8.80, -- Padrão CLT 8 horas e 48 minutos (8.8h = 528 min)
+    work_saturdays BOOLEAN DEFAULT FALSE,          -- Sábados e Domingos são 100% Horas Extras
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     admission_date DATE DEFAULT CURRENT_DATE,
     dismissal_date DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Se a coluna 'matricula' ainda não existir em tabelas antigas, adiciona automaticamente
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS matricula TEXT;
 
 -- 2. TABELA DE REGISTROS DE PONTO (time_records)
 CREATE TABLE IF NOT EXISTS public.time_records (
@@ -52,10 +57,14 @@ CREATE TABLE IF NOT EXISTS public.products (
     id TEXT PRIMARY KEY,
     code TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'limpeza' CHECK (category IN ('limpeza', 'manutencao')), -- Setor: Limpeza ou Manutenção
     unit TEXT NOT NULL DEFAULT 'UN',
     description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Se a coluna 'category' não existir em tabelas antigas, adiciona automaticamente
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'limpeza';
 
 -- 5. TABELA DE MOVIMENTAÇÕES DE ESTOQUE (stock_movements)
 CREATE TABLE IF NOT EXISTS public.stock_movements (
@@ -72,8 +81,10 @@ CREATE TABLE IF NOT EXISTS public.stock_movements (
 -- =============================================================================
 -- ÍNDICES PARA ALTA PERFORMANCE DE CONSULTA
 -- =============================================================================
+CREATE INDEX IF NOT EXISTS idx_employees_matricula ON public.employees(matricula);
 CREATE INDEX IF NOT EXISTS idx_time_records_emp_date ON public.time_records(employee_id, date);
 CREATE INDEX IF NOT EXISTS idx_allowances_emp_date ON public.allowances(employee_id, date);
+CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_code ON public.stock_movements(product_code);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_date ON public.stock_movements(date);
 
@@ -85,6 +96,12 @@ ALTER TABLE public.time_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.allowances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Permitir Acesso Total Employees" ON public.employees;
+DROP POLICY IF EXISTS "Permitir Acesso Total TimeRecords" ON public.time_records;
+DROP POLICY IF EXISTS "Permitir Acesso Total Allowances" ON public.allowances;
+DROP POLICY IF EXISTS "Permitir Acesso Total Products" ON public.products;
+DROP POLICY IF EXISTS "Permitir Acesso Total StockMovements" ON public.stock_movements;
 
 CREATE POLICY "Permitir Acesso Total Employees" ON public.employees FOR ALL USING (true);
 CREATE POLICY "Permitir Acesso Total TimeRecords" ON public.time_records FOR ALL USING (true);

@@ -222,8 +222,8 @@ export default function TimesheetReport({
             </div>
 
             <div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>CPF</span>
-              <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>{currentEmployee.cpf || 'Não informado'}</div>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Nº de Matrícula</span>
+              <div style={{ fontSize: '0.9rem', fontWeight: 600, fontFamily: 'monospace' }}>{currentEmployee.matricula || currentEmployee.cpf || 'Não informado'}</div>
             </div>
 
             <div>
