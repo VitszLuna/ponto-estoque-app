@@ -56,7 +56,10 @@ export default function StockManagement({
   const [movementSearch, setMovementSearch] = useState('');
 
   // ---------- ESTADOS DE EXPORTAÇÃO / RELATÓRIOS ----------
-  const [reportMode, setReportMode] = useState('by_date'); // 'by_date' ou 'by_product'
+  const [reportMode, setReportMode] = useState('by_month'); // 'by_month' | 'by_date' | 'by_product'
+  const currentDateObj = new Date();
+  const [selectedReportMonth, setSelectedReportMonth] = useState(currentDateObj.getMonth() + 1);
+  const [selectedReportYear, setSelectedReportYear] = useState(currentDateObj.getFullYear());
   const [selectedReportDate, setSelectedReportDate] = useState(todayStr);
   const [selectedReportProductCode, setSelectedReportProductCode] = useState('');
 
@@ -235,6 +238,49 @@ export default function StockManagement({
   };
 
   // EXPORTAÇÕES (CSV & IMPRESSÃO PDF)
+  const movementsBySelectedMonth = useMemo(() => {
+    return stockMovements.filter(m => {
+      if (!m.date) return false;
+      const parts = m.date.split('-');
+      if (parts.length !== 3) return false;
+      const y = parseInt(parts[0], 10);
+      const mo = parseInt(parts[1], 10);
+      return y === selectedReportYear && mo === selectedReportMonth;
+    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [stockMovements, selectedReportMonth, selectedReportYear]);
+
+  const handleExportMonthCSV = () => {
+    if (movementsBySelectedMonth.length === 0) {
+      alert('Nenhuma movimentação encontrada no mês selecionado.');
+      return;
+    }
+
+    let csv = "data:text/csv;charset=utf-8,";
+    csv += `Movimentacoes de Estoque - Mes ${selectedReportMonth}/${selectedReportYear}\n`;
+    csv += "Data;Codigo Produto;Nome do Produto;Categoria;Unidade;Tipo Movimentacao;Quantidade;Observacao\n";
+
+    movementsBySelectedMonth.forEach(m => {
+      const code = m.product_code || '';
+      const prodObj = products.find(p => (p.code || '').toUpperCase() === code.toUpperCase());
+      const prodName = prodObj ? prodObj.name : 'Produto Desconhecido';
+      const catLabel = prodObj?.category === 'manutencao' ? 'Manutenção' : 'Limpeza';
+      const unit = prodObj ? prodObj.unit : 'UN';
+      const typeLabel = m.type === 'entrada' ? 'ENTRADA (+)' : 'SAIDA (-)';
+      const qty = m.quantity || 0;
+      const obs = (m.notes || '').replace(/;/g, ' ');
+
+      csv += `${m.date};${code};${prodName};${catLabel};${unit};${typeLabel};${qty};${obs}\n`;
+    });
+
+    const encodedUri = encodeURI(csv);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Movimentacoes_Estoque_Mes_${selectedReportMonth}_${selectedReportYear}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const movementsBySelectedDate = useMemo(() => {
     if (!selectedReportDate) return [];
     return stockMovements.filter(m => m.date === selectedReportDate);
@@ -409,7 +455,7 @@ export default function StockManagement({
               Gestão de Estoque: Limpeza & Manutenção
             </h2>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Controle de materiais setorizados por 🧹 <strong>Limpeza</strong> e 🔧 <strong>Manutenção</strong>.
+              Controle de materiais setorizados por <strong>Limpeza</strong> e <strong>Manutenção</strong>.
             </p>
           </div>
         </div>
@@ -525,14 +571,14 @@ export default function StockManagement({
               style={{ flex: 1 }}
               onClick={() => setCategoryFilter('limpeza')}
             >
-              🧹 Limpeza
+              Limpeza
             </button>
             <button
               className={`btn btn-sm ${categoryFilter === 'manutencao' ? 'btn-primary' : 'btn-secondary'}`}
               style={{ flex: 1 }}
               onClick={() => setCategoryFilter('manutencao')}
             >
-              🔧 Manutenção
+              Manutenção
             </button>
           </div>
         </div>
@@ -582,7 +628,7 @@ export default function StockManagement({
                     <option value="">-- Selecionar Produto --</option>
                     {products.map(p => (
                       <option key={p.id} value={p.code}>
-                        [{p.category === 'manutencao' ? '🔧 Manutenção' : '🧹 Limpeza'}] {p.code} - {p.name}
+                        [{p.category === 'manutencao' ? 'Manutenção' : 'Limpeza'}] {p.code} - {p.name}
                       </option>
                     ))}
                   </select>
@@ -653,7 +699,7 @@ export default function StockManagement({
                 }}>
                   <div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
-                      Setor: <strong>{activeMovementProduct.category === 'manutencao' ? '🔧 Manutenção' : '🧹 Limpeza'}</strong>
+                      Setor: <strong>{activeMovementProduct.category === 'manutencao' ? 'Manutenção' : 'Limpeza'}</strong>
                     </div>
                     <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                       [{activeMovementProduct.code}] {activeMovementProduct.name}
@@ -755,7 +801,7 @@ export default function StockManagement({
                               color: cat === 'manutencao' ? 'var(--accent-blue)' : '#047857',
                               fontWeight: 700
                             }}>
-                              {cat === 'manutencao' ? '🔧 Manutenção' : '🧹 Limpeza'}
+                              {cat === 'manutencao' ? 'Manutenção' : 'Limpeza'}
                             </span>
                           </td>
                           <td style={{ fontWeight: 600 }}>
@@ -820,8 +866,8 @@ export default function StockManagement({
                     onChange={e => setProductForm({ ...productForm, category: e.target.value })}
                     required
                   >
-                    <option value="limpeza">🧹 Estoque de Limpeza</option>
-                    <option value="manutencao">🔧 Estoque de Manutenção</option>
+                    <option value="limpeza">Estoque de Limpeza</option>
+                    <option value="manutencao">Estoque de Manutenção</option>
                   </select>
                 </div>
 
@@ -947,7 +993,7 @@ export default function StockManagement({
                               color: cat === 'manutencao' ? 'var(--accent-blue)' : '#047857',
                               fontWeight: 700
                             }}>
-                              {cat === 'manutencao' ? '🔧 Manutenção' : '🧹 Limpeza'}
+                              {cat === 'manutencao' ? 'Manutenção' : 'Limpeza'}
                             </span>
                           </td>
                           <td style={{ fontFamily: 'monospace', fontWeight: 800, color: 'var(--accent-blue)' }}>
@@ -1009,7 +1055,13 @@ export default function StockManagement({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
           <div className="clean-card no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                className={`btn ${reportMode === 'by_month' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setReportMode('by_month')}
+              >
+                <Calendar size={16} /> Movimentações por Mês
+              </button>
               <button
                 className={`btn ${reportMode === 'by_date' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setReportMode('by_date')}
@@ -1025,7 +1077,11 @@ export default function StockManagement({
             </div>
 
             <div>
-              {reportMode === 'by_date' ? (
+              {reportMode === 'by_month' ? (
+                <button className="btn btn-emerald" onClick={handleExportMonthCSV}>
+                  <Download size={16} /> Exportar CSV do Mês
+                </button>
+              ) : reportMode === 'by_date' ? (
                 <button className="btn btn-emerald" onClick={handleExportDateCSV}>
                   <Download size={16} /> Exportar CSV
                 </button>
@@ -1039,6 +1095,83 @@ export default function StockManagement({
               </button>
             </div>
           </div>
+
+          {reportMode === 'by_month' && (
+            <div className="clean-card print-only-sheet">
+              <div className="no-print" style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+                <div style={{ minWidth: '180px' }}>
+                  <label className="form-label">Mês Competência</label>
+                  <select
+                    className="form-select"
+                    value={selectedReportMonth}
+                    onChange={e => setSelectedReportMonth(parseInt(e.target.value, 10))}
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                      <option key={m} value={m}>
+                        {new Date(2026, m - 1, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ minWidth: '120px' }}>
+                  <label className="form-label">Ano</label>
+                  <select
+                    className="form-select"
+                    value={selectedReportYear}
+                    onChange={e => setSelectedReportYear(parseInt(e.target.value, 10))}
+                  >
+                    {[2024, 2025, 2026, 2027, 2028].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="table-responsive">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>Código</th>
+                      <th>Produto</th>
+                      <th>Setor</th>
+                      <th>Tipo</th>
+                      <th>Quantidade</th>
+                      <th>Observação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movementsBySelectedMonth.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                          Nenhuma movimentação registrada no mês selecionado.
+                        </td>
+                      </tr>
+                    ) : (
+                      movementsBySelectedMonth.map(m => {
+                        const codeUpper = (m.product_code || '').toUpperCase();
+                        const prodObj = products.find(p => (p.code || '').toUpperCase() === codeUpper);
+                        const cat = prodObj?.category || 'limpeza';
+
+                        return (
+                          <tr key={m.id}>
+                            <td style={{ fontFamily: 'monospace' }}>{m.date}</td>
+                            <td style={{ fontFamily: 'monospace', fontWeight: 800 }}>{codeUpper}</td>
+                            <td style={{ fontWeight: 700 }}>{prodObj ? prodObj.name : 'Produto'}</td>
+                            <td>{cat === 'manutencao' ? 'Manutenção' : 'Limpeza'}</td>
+                            <td>{m.type === 'entrada' ? '+ Entrada' : '- Saída'}</td>
+                            <td style={{ fontWeight: 800 }}>{m.quantity} {prodObj?.unit || ''}</td>
+                            <td>{m.notes || '--'}</td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {reportMode === 'by_date' && (
             <div className="clean-card print-only-sheet">

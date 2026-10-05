@@ -101,7 +101,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenSupabaseModal, t
             onClick={() => setActiveTab('stock')}
             style={{ fontWeight: 700 }}
           >
-            📦 Estoque
+            Estoque
           </button>
         </div>
 

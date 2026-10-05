@@ -106,7 +106,7 @@ export default function SupabaseConfigModal({ isOpen, onClose }) {
             color: 'var(--text-muted)',
             marginBottom: '1.25rem'
           }}>
-            ℹ️ O script de tabelas SQL para o Supabase já está salvo na raiz da pasta em <code>supabase_schema.sql</code>.
+            O script de tabelas SQL para o Supabase já está salvo na raiz da pasta em <code>supabase_schema.sql</code>.
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>

@@ -222,7 +222,7 @@ export default function LoginPage({ onLoginSuccess }) {
           fontSize: '0.75rem',
           color: 'var(--text-muted)'
         }}>
-          🔒 Ambiente Seguro • PONTO & ESTOQUE
+          Ambiente Seguro • PONTO & ESTOQUE
         </div>
 
       </div>

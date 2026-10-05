@@ -330,18 +330,6 @@ export default function EmployeeManagement({
                 </div>
               </div>
 
-              <div style={{
-                background: 'var(--accent-blue-subtle)',
-                padding: '0.75rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '0.825rem',
-                color: 'var(--accent-blue)',
-                fontWeight: 600,
-                marginTop: '0.5rem'
-              }}>
-                ℹ️ Jornada Padrão da Empresa: <strong>8h 48min por dia (Segunda a Sexta)</strong> com 1h de almoço. Sábados e Domingos são 100% Horas Extras.
-              </div>
-
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>
                   Cancelar
