@@ -41,6 +41,18 @@ CREATE TABLE IF NOT EXISTS public.time_records (
     CONSTRAINT unique_emp_date UNIQUE (employee_id, date)
 );
 
+-- Garantir colunas e restrição em tabelas time_records criadas anteriormente
+ALTER TABLE public.time_records ADD COLUMN IF NOT EXISTS abono_hours NUMERIC(4,2) DEFAULT 0.00;
+ALTER TABLE public.time_records ADD COLUMN IF NOT EXISTS abono_reason TEXT;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'unique_emp_date'
+    ) THEN
+        ALTER TABLE public.time_records ADD CONSTRAINT unique_emp_date UNIQUE (employee_id, date);
+    END IF;
+END $$;
+
 -- 3. TABELA DE ABONOS E ATESTADOS (allowances)
 CREATE TABLE IF NOT EXISTS public.allowances (
     id TEXT PRIMARY KEY,
@@ -103,8 +115,8 @@ DROP POLICY IF EXISTS "Permitir Acesso Total Allowances" ON public.allowances;
 DROP POLICY IF EXISTS "Permitir Acesso Total Products" ON public.products;
 DROP POLICY IF EXISTS "Permitir Acesso Total StockMovements" ON public.stock_movements;
 
-CREATE POLICY "Permitir Acesso Total Employees" ON public.employees FOR ALL USING (true);
-CREATE POLICY "Permitir Acesso Total TimeRecords" ON public.time_records FOR ALL USING (true);
-CREATE POLICY "Permitir Acesso Total Allowances" ON public.allowances FOR ALL USING (true);
-CREATE POLICY "Permitir Acesso Total Products" ON public.products FOR ALL USING (true);
-CREATE POLICY "Permitir Acesso Total StockMovements" ON public.stock_movements FOR ALL USING (true);
+CREATE POLICY "Permitir Acesso Total Employees" ON public.employees FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir Acesso Total TimeRecords" ON public.time_records FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir Acesso Total Allowances" ON public.allowances FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir Acesso Total Products" ON public.products FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir Acesso Total StockMovements" ON public.stock_movements FOR ALL USING (true) WITH CHECK (true);

@@ -97,11 +97,26 @@ export const api = {
   // ---------------- REGISTROS DE PONTO ----------------
   timeRecords: {
     async listAll() {
+      let supabaseRecords = null;
       if (isSupabaseConfigured()) {
         const { data, error } = await supabase.from('time_records').select('*').order('date', { ascending: true });
-        if (!error && data) return data;
+        if (!error && data) supabaseRecords = data;
       }
-      return getLocalData('ponto_time_records', INITIAL_TIME_RECORDS);
+
+      const localRecords = getLocalData('ponto_time_records', INITIAL_TIME_RECORDS);
+      if (supabaseRecords !== null) {
+        // Mescla registros do Supabase com registros locais não-sincronizados
+        const supMap = new Map(supabaseRecords.map(r => [`${r.employee_id}_${r.date}`, r]));
+        localRecords.forEach(r => {
+          const key = `${r.employee_id}_${r.date}`;
+          if (!supMap.has(key)) {
+            supMap.set(key, r);
+          }
+        });
+        return Array.from(supMap.values());
+      }
+
+      return localRecords;
     },
 
     async listByMonth(employeeId, year, month) {
@@ -144,14 +159,36 @@ export const api = {
       };
 
       if (isSupabaseConfigured()) {
+        // Garantir que o funcionário exista no Supabase para evitar erro de Chave Estrangeira (FK)
+        const localEmps = getLocalData('ponto_employees', []);
+        const empObj = localEmps.find(e => e.id === recordData.employee_id);
+        if (empObj) {
+          try {
+            await supabase.from('employees').upsert([empObj], { onConflict: 'id' });
+          } catch (e) {
+            console.error('Erro ao sincronizar funcionário no Supabase:', e);
+          }
+        }
+
         const { data, error } = await supabase
           .from('time_records')
           .upsert([recToSave], { onConflict: 'employee_id,date' })
           .select()
           .single();
+
         if (error) {
           console.error('Erro no Supabase time_records.upsert:', error);
+          alert(`Atenção (Supabase): Ocorreu um erro ao salvar o ponto no Supabase.\n\nDetalhe do Erro: ${error.message}\n\nPor favor, copie e execute o script SQL do arquivo 'supabase_schema.sql' no SQL Editor do seu projeto Supabase (https://app.supabase.com).`);
         } else if (data) {
+          // Atualiza também no localStorage para redundância e sincronização local
+          const list = getLocalData('ponto_time_records', INITIAL_TIME_RECORDS);
+          const existingIdx = list.findIndex(r => r.employee_id === recToSave.employee_id && r.date === recToSave.date);
+          if (existingIdx !== -1) {
+            list[existingIdx] = { ...list[existingIdx], ...data };
+          } else {
+            list.push(data);
+          }
+          setLocalData('ponto_time_records', list);
           return data;
         }
       }
