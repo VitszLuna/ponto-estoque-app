@@ -25,6 +25,13 @@ export default function TimeClockModal({
   const [abonoReason, setAbonoReason] = useState('');
   const [notes, setNotes] = useState('');
 
+  useEffect(() => {
+    if (isOpen) {
+      setEmployeeId(initialEmployeeId || (employees[0]?.id || ''));
+      setDate(initialDate || todayStr);
+    }
+  }, [isOpen, initialEmployeeId, initialDate, employees]);
+
   // Carregar dados existentes para a combinação de funcionário e data
   useEffect(() => {
     if (!employeeId) return;

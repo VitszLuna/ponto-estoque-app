@@ -44,11 +44,7 @@ export default function App() {
       const empList = await api.employees.list();
       setEmployees(empList || []);
 
-      const currentDate = new Date();
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-
-      const recList = await api.timeRecords.listByMonth(null, year, month);
+      const recList = await api.timeRecords.listAll();
       setTimeRecords(recList || []);
 
       const prodList = await api.products.list();

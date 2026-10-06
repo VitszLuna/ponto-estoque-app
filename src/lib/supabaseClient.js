@@ -96,6 +96,14 @@ export const api = {
 
   // ---------------- REGISTROS DE PONTO ----------------
   timeRecords: {
+    async listAll() {
+      if (isSupabaseConfigured()) {
+        const { data, error } = await supabase.from('time_records').select('*').order('date', { ascending: true });
+        if (!error && data) return data;
+      }
+      return getLocalData('ponto_time_records', INITIAL_TIME_RECORDS);
+    },
+
     async listByMonth(employeeId, year, month) {
       // month é 1-indexed (1 a 12)
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -130,24 +138,33 @@ export const api = {
     },
 
     async upsert(recordData) {
+      const recToSave = {
+        ...recordData,
+        id: recordData.id || `rec-${recordData.employee_id}-${recordData.date}`
+      };
+
       if (isSupabaseConfigured()) {
         const { data, error } = await supabase
           .from('time_records')
-          .upsert([recordData], { onConflict: 'employee_id,date' })
+          .upsert([recToSave], { onConflict: 'employee_id,date' })
           .select()
           .single();
-        if (!error && data) return data;
+        if (error) {
+          console.error('Erro no Supabase time_records.upsert:', error);
+        } else if (data) {
+          return data;
+        }
       }
 
       const list = getLocalData('ponto_time_records', INITIAL_TIME_RECORDS);
-      const existingIdx = list.findIndex(r => r.employee_id === recordData.employee_id && r.date === recordData.date);
+      const existingIdx = list.findIndex(r => r.employee_id === recToSave.employee_id && r.date === recToSave.date);
 
       let savedRecord;
       if (existingIdx !== -1) {
-        list[existingIdx] = { ...list[existingIdx], ...recordData };
+        list[existingIdx] = { ...list[existingIdx], ...recToSave };
         savedRecord = list[existingIdx];
       } else {
-        savedRecord = { ...recordData, id: `rec-${Date.now()}` };
+        savedRecord = recToSave;
         list.push(savedRecord);
       }
 
