@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Lock, Mail, ArrowRight, Boxes } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Boxes, UserCheck } from 'lucide-react';
+import { getDemoData } from '../utils/demoData';
 
 export default function LoginPage({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -7,6 +8,31 @@ export default function LoginPage({ onLoginSuccess }) {
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const handleTestLogin = () => {
+    setIsLoading(true);
+    setErrorMsg('');
+
+    setTimeout(() => {
+      const { demoEmployee, demoRecords } = getDemoData();
+
+      const userData = {
+        name: 'VISITANTE (DEMO)',
+        email: 'visitante@portfolio.com',
+        role: 'Visualizador / Portfólio',
+        isDemo: true,
+        loginTime: new Date().toISOString()
+      };
+
+      // Carrega exclusivamente 1 funcionário fictício e 1 mês de ponto imaginário
+      localStorage.setItem('ponto_employees', JSON.stringify([demoEmployee]));
+      localStorage.setItem('ponto_time_records', JSON.stringify(demoRecords));
+      localStorage.setItem('ponto_user_session', JSON.stringify(userData));
+
+      setIsLoading(false);
+      onLoginSuccess(userData);
+    }, 250);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -212,6 +238,41 @@ export default function LoginPage({ onLoginSuccess }) {
             )}
           </button>
         </form>
+
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          margin: '1.25rem 0'
+        }}>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            ou para portfólio
+          </span>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={handleTestLogin}
+          disabled={isLoading}
+          style={{
+            width: '100%',
+            padding: '0.75rem',
+            fontSize: '0.9rem',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            border: '1px solid var(--border-color)',
+            background: 'var(--bg-subtle)'
+          }}
+        >
+          <UserCheck size={18} />
+          Entrar como Teste (Demonstração)
+        </button>
 
         {/* RODAPÉ */}
         <div style={{

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getDemoData } from '../utils/demoData';
 
 // Tentar carregar variáveis do .env ou do localStorage para runtime
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('PONTO_SUPABASE_URL') || '';
@@ -8,15 +9,25 @@ export const isSupabaseConfigured = () => {
   return Boolean(supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith('http'));
 };
 
+export const isDemoSession = () => {
+  try {
+    const session = JSON.parse(localStorage.getItem('ponto_user_session') || '{}');
+    return Boolean(session?.isDemo);
+  } catch {
+    return false;
+  }
+};
+
 export const supabase = isSupabaseConfigured()
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
 // ==========================================
-// DADOS INICIAIS DE DEMONSTRAÇÃO (VAZIOS)
+// DADOS INICIAIS DE DEMONSTRAÇÃO (1 FUNCIONÁRIO E 1 MÊS DE PONTO)
 // ==========================================
-const INITIAL_EMPLOYEES = [];
-const INITIAL_TIME_RECORDS = [];
+const { demoEmployee: DEFAULT_DEMO_EMP, demoRecords: DEFAULT_DEMO_RECS } = getDemoData();
+const INITIAL_EMPLOYEES = [DEFAULT_DEMO_EMP];
+const INITIAL_TIME_RECORDS = DEFAULT_DEMO_RECS;
 const INITIAL_ALLOWANCES = [];
 const INITIAL_PRODUCTS = [];
 const INITIAL_STOCK_MOVEMENTS = [];
@@ -43,6 +54,11 @@ export const api = {
   // ---------------- FUNCIONÁRIOS ----------------
   employees: {
     async list() {
+      if (isDemoSession()) {
+        const { demoEmployee } = getDemoData();
+        const local = getLocalData('ponto_employees', [demoEmployee]);
+        return local && local.length > 0 ? local : [demoEmployee];
+      }
       if (isSupabaseConfigured()) {
         const { data, error } = await supabase.from('employees').select('*').order('name');
         if (!error && data) return data;
@@ -58,7 +74,7 @@ export const api = {
         created_at: new Date().toISOString()
       };
 
-      if (isSupabaseConfigured()) {
+      if (!isDemoSession() && isSupabaseConfigured()) {
         const { data, error } = await supabase.from('employees').insert([newEmployee]).select().single();
         if (!error && data) return data;
       }
@@ -70,7 +86,7 @@ export const api = {
     },
 
     async update(id, updates) {
-      if (isSupabaseConfigured()) {
+      if (!isDemoSession() && isSupabaseConfigured()) {
         const { data, error } = await supabase.from('employees').update(updates).eq('id', id).select().single();
         if (!error && data) return data;
       }
@@ -97,6 +113,12 @@ export const api = {
   // ---------------- REGISTROS DE PONTO ----------------
   timeRecords: {
     async listAll() {
+      if (isDemoSession()) {
+        const { demoRecords } = getDemoData();
+        const local = getLocalData('ponto_time_records', demoRecords);
+        return local && local.length > 0 ? local : demoRecords;
+      }
+
       let supabaseRecords = null;
       if (isSupabaseConfigured()) {
         const { data, error } = await supabase.from('time_records').select('*').order('date', { ascending: true });
@@ -158,7 +180,7 @@ export const api = {
         id: recordData.id || `rec-${recordData.employee_id}-${recordData.date}`
       };
 
-      if (isSupabaseConfigured()) {
+      if (!isDemoSession() && isSupabaseConfigured()) {
         // Garantir que o funcionário exista no Supabase para evitar erro de Chave Estrangeira (FK)
         const localEmps = getLocalData('ponto_employees', []);
         const empObj = localEmps.find(e => e.id === recordData.employee_id);
